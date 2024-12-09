@@ -99,7 +99,6 @@ def bdf_process(neirong = ''):
             for j in range(14-len(bitmap)):
                 bitmap.insert(0,"00")
             # 处理x偏移
-            print(zi_size[i][3])
             if int(zi_size[i][3]) > 0:
                 for k in range(14):
                     bitmap[k] = decimal_to_hexadecimal(int(bitmap[k],16) >> abs(int(zi_size[i][3])))
@@ -116,7 +115,6 @@ def bdf_process(neirong = ''):
                     if int(zi_size[i][0]) > 8:
                         b = b + "000000"
                 bitmap[j] = b
-                print(b)
             # 从下往上，从左往右扫描
             line = ''
             scan = []
