@@ -129,7 +129,8 @@ def bdf_process(neirong = ''):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input',type=str,help='欲发送内容')
-    parser.add_argument('--output',type=str,help='wav文件名')
+    parser.add_argument('-o','--output',type=str,default='a.wav',help='wav文件名')
+    parser.add_argument('-f','--freq',type=str,default='1000',help='载波频率Hz')
     args = parser.parse_args()
     zimap = bdf_process(args.input)
     txt = '0000111111110000000000000000'
@@ -145,6 +146,6 @@ def main():
         f.setnchannels(1)
         f.setsampwidth(2)
         f.setframerate(SAMPLE_RATE)
-        f.writeframes(ASK(txt,1000,4.08))
+        f.writeframes(ASK(txt,float(args.freq),4.08))
 if __name__ == '__main__':
     main()
