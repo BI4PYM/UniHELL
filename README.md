@@ -11,7 +11,7 @@
 
 例
 
-`python .\UniHELL.py "你好，世界！" --output "output" -f 1000`
+`python .\UniHELL.py "你好，世界！" --output "output" -f 900`
 
 下一步计划：实现ASK的包络成形
 
