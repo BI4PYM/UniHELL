@@ -130,7 +130,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input',type=str,help='欲发送内容')
     parser.add_argument('-o','--output',type=str,default='a.wav',help='wav文件名')
-    parser.add_argument('-f','--freq',type=float,default='1000',help='载波频率Hz')
+    parser.add_argument('-f','--freq',type=float,default='900',help='载波频率Hz')
     args = parser.parse_args()
     zimap = bdf_process(args.input)
     txt = '0000111111110000000000000000'
