@@ -1,5 +1,7 @@
 # UniHELL
-用于UTF-8的Hellschreiber调制器
+用于UTF-8（特别是汉字）的Hellschreiber调制器
+
+生成ASK的FELD HELL格式，14px字体，兼容一般的HELL解调软件
 
 必选参数：欲发送的内容（字符串）
 
