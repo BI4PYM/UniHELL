@@ -2,15 +2,23 @@
 import wave,struct,argparse
 from math import sin,cos,asin,acos
 from numpy import sign # type: ignore
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 96000
 PI = 3.14159265358979323846
 BDF = 'wenquanyi_13px.bdf'
 delta_lenth = 0
 older = 0
-olderd = 0
-
-def write_sin(freq = 0,ms = 0,phi = 0,amp = 1):
-    global delta_lenth,older,olderd
+olderd = 1
+fltn=0.5
+def cosflt(cycle=1,t=0):
+    global fltn
+    if (t>=0 and t<(cycle*fltn)):
+        return 0.5*(1-cos(PI*t/cycle/fltn))
+    elif (t<0 and t>(-cycle*fltn)):
+        return 0.5*(1-cos(PI+PI*t/cycle/fltn))
+    else:
+        return 1
+def write_sin(freq = 0.0,ms = 0.0,phi = 0.0,amp = 1.0,flt = 0,cycle = 1):
+    global delta_lenth,older,olderd,fltn
     RATE = SAMPLE_RATE
     P = PI
     num_samples = int(RATE * ms / 1000)
@@ -21,12 +29,36 @@ def write_sin(freq = 0,ms = 0,phi = 0,amp = 1):
     phi_samples = RATE * phi
     older = amp * sin((2 * P * freq * num_samples + phi_samples) / RATE)
     olderd = amp * cos((2 * P * freq * num_samples + phi_samples) / RATE)
-    for i in range(num_samples):
-        outsin = int(32767 * amp * sin((2 * P * freq * i + phi_samples) / RATE))
-        yield outsin
+    if flt==1:
+        for i in range(num_samples):
+            outsin = int(32767 * cosflt(SAMPLE_RATE*cycle,i) * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+            yield outsin
+    elif flt==-1:
+        for i in range(num_samples):
+            if i<=num_samples-int(num_samples*fltn):
+                outsin = int(32767 * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+            else:
+                outsin = int(32767 * cosflt(SAMPLE_RATE*cycle,-i+int(num_samples*(1-fltn))) * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+            yield outsin
+    elif flt==2:
+        if fltn <= 0.5:
+            for i in range(num_samples):
+                if i<=num_samples-int(num_samples*fltn):
+                    outsin = int(32767 * cosflt(SAMPLE_RATE*cycle,i) * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+                else:
+                    outsin = int(32767 * cosflt(SAMPLE_RATE*cycle,-i+int(num_samples*(1-fltn))) * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+                yield outsin
+        else:
+            for i in range(num_samples):
+                outsin = int(32767 * cosflta(SAMPLE_RATE*cycle,i) * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+                yield outsin
+    else:
+        for i in range(num_samples):
+            outsin = int(32767 * amp * sin((2 * P * freq * i + phi_samples) / RATE))
+            yield outsin
 
-def write_cos(freq = 0,ms = 0,phi = 0,amp = 1):
-    global delta_lenth,older,olderd
+def write_cos(freq = 0.0,ms = 0.0,phi = 0.0,amp = 1.0,flt = 0,cycle = 1):
+    global delta_lenth,older,olderd,fltn
     RATE = SAMPLE_RATE
     P = PI
     num_samples = int(RATE * ms / 1000)
@@ -37,23 +69,47 @@ def write_cos(freq = 0,ms = 0,phi = 0,amp = 1):
     phi_samples = RATE * phi
     older = amp * cos((2 * P * freq * num_samples + phi_samples) / RATE)
     olderd = - amp * sin((2 * P * freq * num_samples + phi_samples) / RATE)
-    for i in range(num_samples):
-        outcos = int(32767 * amp * cos((2 * P * freq * i + phi_samples) / RATE))
-        yield outcos
+    if flt==1:
+        for i in range(num_samples):
+            outcos = int(32767 * cosflt(SAMPLE_RATE*cycle,i) * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+            yield outcos
+    elif flt==-1:
+        for i in range(num_samples):
+            if i<=num_samples-int(num_samples*fltn):
+                outcos = int(32767 * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+            else:
+                outcos = int(32767 * cosflt(SAMPLE_RATE*cycle,-i+int(num_samples*(1-fltn))) * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+            yield outcos
+    elif flt==2:
+        if fltn <= 0.5:
+            for i in range(num_samples):
+                if i<=num_samples-int(num_samples*fltn):
+                    outcos = int(32767 * cosflt(SAMPLE_RATE*cycle,i) * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+                else:
+                    outcos = int(32767 * cosflt(SAMPLE_RATE*cycle,-i+int(num_samples*(1-fltn))) * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+                yield outcos
+        else:
+          for i in range(num_samples):
+                    outcos = int(32767 * cosflta(SAMPLE_RATE*cycle,i) * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+                    yield outcos  
+    else:
+        for i in range(num_samples):
+            outcos = int(32767 * amp * cos((2 * P * freq * i + phi_samples) / RATE))
+            yield outcos
 
-def write_tone(freq = 0,ms = 0,phi = 0,amp = 1,sc = 0,phi_con = 1):
+def write_tone(freq = 0,ms = 0,phi = 0,amp = 1,sc = 0,phi_con = 1,cycle = 1,flt = 0):
     global delta_lenth,older,olderd
     data = b''
     if sc == 0:
          if phi_con:
-            lst = list(write_sin(freq,ms,sign(olderd) * asin(older) + abs(sign(olderd) - 1) / 2 * PI,amp))
+            lst = list(write_sin(freq,ms,sign(olderd) * asin(older) + abs(sign(olderd) - 1) / 2 * PI,amp,cycle=cycle,flt=flt))
          else:
-            lst = list(write_sin(freq,ms,phi,amp))
+            lst = list(write_sin(freq,ms,phi,amp,cycle=cycle,flt=flt))
     else:
          if phi_con:
-            lst = list(write_cos(freq,ms,-acos(older),amp))
+            lst = list(write_cos(freq,ms,-acos(older),amp,cycle=cycle,flt=flt))
          else:
-            lst = list(write_cos(freq,ms,phi,amp))
+            lst = list(write_cos(freq,ms,phi,amp,cycle=cycle,flt=flt))
     for digit in lst:
         data += struct.pack('<h',digit)
     return data
@@ -65,11 +121,38 @@ def decimal_to_hexadecimal(value):
 
 def ASK(input = '',freq = 0,ms = 0):
     a = b''
+    global older,olderd
+    for i in range(len(input)):
+        if i-1>=0:
+            if input[i] == '1':
+                if input[i-1]=='0' and input[i+1]=='0':
+                    a+=write_tone(freq,ms,cycle=ms*0.001,flt = 2)
+                elif input[i-1]=='0':
+                    a+=write_tone(freq,ms,cycle=ms*0.001,flt = 1)
+                elif input[i+1]=='0':
+                    a+=write_tone(freq,ms,cycle=ms*0.001,flt = -1)
+                elif input[i+1]=='1' and input[i+1]=='1':
+                    a+=write_tone(freq,ms,cycle=ms*0.001)
+            elif input[i] == '0':
+                a+=write_tone(0,ms,0,0,cycle=ms*0.001)
+                older = 0
+                olderd = 1
+        else:
+            if input[i] == '1':
+                a+=write_tone(freq,ms,cycle=ms*0.001)
+            elif input[i] == '0':
+                a+=write_tone(0,ms,0,0,cycle=ms*0.001)
+                older = 0
+                olderd = 1
+    return a
+def FSK(input = '',markfreq = 0,spacefreq = 0,ms = 0):
+    a = b''
+    global older,olderd
     for i in range(len(input)):
         if input[i] == '1':
-            a+=write_tone(freq,ms)
+            a+=write_tone(markfreq,ms,cycle=ms*0.001)
         elif input[i] == '0':
-            a+=write_tone(0,ms,0,0)
+            a+=write_tone(spacefreq,ms,cycle=ms*0.001)
     return a
 
 def bdf_process(neirong = ''):
@@ -130,13 +213,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input',type=str,help='欲发送内容')
     parser.add_argument('-o','--output',type=str,default='a.wav',help='wav文件名')
-    parser.add_argument('-f','--freq',type=float,default='900',help='载波频率Hz')
+    parser.add_argument('-f','--freq',type=float,default='900.0',help='载波频率Hz')
+    parser.add_argument('-m','--mode',type=int,default='0',help='0:FELD-HELL 1:SLOW-HELL 2:FELD-HELL-X5 3:FELD-HELL-X9 4:FSK-HELL-105 5:FSK-HELL-245')
     args = parser.parse_args()
     zimap = bdf_process(args.input)
     txt = '0000111111110000000000000000'
     for i in range(len(zimap)):
         for j in range(len(zimap[i])):
             txt += zimap[i][j]
+    if args.mode == 0:
+        audio = ASK(txt,args.freq,4.08163265)
+    elif args.mode == 1:
+        audio = ASK(txt,args.freq,35.7142857)
+    elif args.mode == 2:
+        audio = ASK(txt,args.freq,0.8163265306)
+    elif args.mode == 3:
+        audio = ASK(txt,args.freq,0.45351473923)
+    elif args.mode == 4:
+        audio = FSK(txt,args.freq-13.125,args.freq+13.125,4.7619047619)
+    elif args.mode == 5:
+        audio = FSK(txt,args.freq-30.625,args.freq+30.625,2.04081632653)
 
     if args.output[-4:] != '.wav':
         filename = args.output + '.wav'
@@ -146,6 +242,6 @@ def main():
         f.setnchannels(1)
         f.setsampwidth(2)
         f.setframerate(SAMPLE_RATE)
-        f.writeframes(ASK(txt,args.freq,4.08))
+        f.writeframes(audio)
 if __name__ == '__main__':
     main()
