@@ -217,10 +217,11 @@ def main():
     parser.add_argument('-m','--mode',type=int,default='0',help='0:FELD-HELL 1:SLOW-HELL 2:FELD-HELL-X5 3:FELD-HELL-X9 4:FSK-HELL-105 5:FSK-HELL-245')
     args = parser.parse_args()
     zimap = bdf_process(args.input)
-    txt = '0000111111110000000000000000'
+    txt = '11000000000000'+'11000000000000'+'00000000000000'+'00000000000000'+'11000000000000'+'11000000000000'+'00000000000000'+'00000000000000'+'11000000000000'+'11000000000000'+'00000000000000'+'00000000000000'
     for i in range(len(zimap)):
         for j in range(len(zimap[i])):
             txt += zimap[i][j]
+    txt += '00000000000000'+'00000000000000'+'11000000000000'+'11000000000000'+'00000000000000'+'00000000000000'+'11000000000000'+'11000000000000'+'00000000000000'+'00000000000000'+'11000000000000'+'11000000000000'
     if args.mode == 0:
         audio = ASK(txt,args.freq,4.08163265)
     elif args.mode == 1:
@@ -245,3 +246,4 @@ def main():
         f.writeframes(audio)
 if __name__ == '__main__':
     main()
+
