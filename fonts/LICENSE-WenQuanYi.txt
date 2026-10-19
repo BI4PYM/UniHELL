@@ -1,0 +1,8 @@
+WenQuanYi Bitmap Song
+
+Copyright (C) 2004-2010 WenQuanYi Project
+License: GPL v2 or later with font embedding exception
+Upstream: http://wenq.org/
+
+This notice applies to font.bdf in the project root.
+The full GPL v2 text is in fonts/GPL-2.0.txt.
