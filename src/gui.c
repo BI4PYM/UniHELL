@@ -12,6 +12,7 @@
 #define RX_MIN 100
 #define TXT_MIN 45
 #define WF_MIN 60
+#define WF_DEFAULT 90
 #define SPLIT_HIT 6
 #define WF_W 512
 #define WF_HH 96
@@ -64,14 +65,64 @@ static HFONT g_ui,g_edit;
 static const char *g_fontpath;
 static WNDPROC g_oldfreq;
 static WNDPROC g_oldtext;
+static int g_dpi=96;
 static int g_rx_y=UI_TOP,g_rx_h=320,g_txt_y=332,g_txt_h=60;
-static int g_wf_y=399,g_wf_h=90,g_pane_x=UI_LEFT,g_pane_w=860;
+static int g_wf_y=399,g_wf_h,g_pane_x=UI_LEFT,g_pane_w=860;
 static int g_split1,g_split2,g_pane_avail,g_pane_bottom;
 static double g_rx_ratio=320.0/380.0;
 static int g_drag;
 static int g_drag_freq0,g_drag_x0;
 
 #define T(id) (gui_text[g_lang][(id)])
+
+static int ui_px(int v) {
+    return MulDiv(v,g_dpi,96);
+}
+
+static void enable_dpi_awareness(void) {
+    typedef BOOL (WINAPI *dpi_context_fn)(HANDLE);
+    union { FARPROC raw; dpi_context_fn fn; } set_ctx;
+    set_ctx.raw=GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetProcessDpiAwarenessContext");
+    if (!set_ctx.fn || !set_ctx.fn((HANDLE)(INT_PTR)-4)) SetProcessDPIAware();
+    HDC dc=GetDC(0);
+    int dpi=dc?GetDeviceCaps(dc,LOGPIXELSX):96;
+    if (dc) ReleaseDC(0,dc);
+    if (dpi>=96 && dpi<=480) g_dpi=dpi;
+}
+
+static int window_dpi(HWND h) {
+    typedef UINT (WINAPI *get_dpi_fn)(HWND);
+    union { FARPROC raw; get_dpi_fn fn; } get_dpi;
+    get_dpi.raw=GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForWindow");
+    if (get_dpi.fn) return (int)get_dpi.fn(h);
+    HDC dc=GetDC(h);
+    int dpi=dc?GetDeviceCaps(dc,LOGPIXELSX):96;
+    if (dc) ReleaseDC(h,dc);
+    return dpi;
+}
+
+static void apply_ui_fonts(void) {
+    HWND ui[]={
+        h_freq,h_bw,h_tx,h_stop,h_rx,h_status,h_mode,h_in,h_out,h_lang,
+        h_llang,h_sql,h_sqlval,h_contrast,h_cval,h_phase,h_phaseval,
+        h_rate,h_rateval,h_auto,h_lmode,h_lfreq,h_lbw,h_lin,h_lout,
+        h_lsql,h_lcontrast,h_lphase,h_lrate
+    };
+    for (int i=0;i<(int)(sizeof(ui)/sizeof(ui[0]));i++)
+        if (ui[i]) SendMessageW(ui[i],WM_SETFONT,(WPARAM)g_ui,TRUE);
+    if (h_text) SendMessageW(h_text,WM_SETFONT,(WPARAM)g_edit,TRUE);
+}
+
+static void refresh_ui_fonts(void) {
+    HFONT old_ui=g_ui,old_edit=g_edit;
+    g_ui=CreateFontW(ui_px(16),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei");
+    g_edit=CreateFontW(ui_px(20),0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei");
+    apply_ui_fonts();
+    if (old_ui) DeleteObject(old_ui);
+    if (old_edit) DeleteObject(old_edit);
+}
 
 static char *get_utf8(HWND h) {
     int n=GetWindowTextLengthW(h);
@@ -335,70 +386,73 @@ static int device_is_cable(int id,int input,const wchar_t *needle) {
 
 static void layout_ui(void) {
     RECT rc;
-    int W,H,pw,ctrl1,ctrl2,ctrl3,avail,wf,rem,rx,tx,devw,xout,langx;
+    int W,H,pw,ctrl1,ctrl2,ctrl3,avail,wf,rem,rx,tx,devw,xout,langx,gap;
+    int rx_min=ui_px(RX_MIN),txt_min=ui_px(TXT_MIN),wf_min=ui_px(WF_MIN);
     if (!hwnd || !h_text) return;
     GetClientRect(hwnd,&rc);
     W=rc.right; H=rc.bottom;
-    pw=W-2*UI_LEFT;
-    if (pw<200) pw=200;
-    ctrl1=H-156;
-    ctrl2=H-104;
-    ctrl3=H-52;
-    g_pane_bottom=ctrl1-30;
-    avail=g_pane_bottom-UI_TOP-2*UI_GAP;
+    pw=W-2*ui_px(UI_LEFT);
+    if (pw<ui_px(200)) pw=ui_px(200);
+    ctrl1=H-ui_px(156);
+    ctrl2=H-ui_px(104);
+    ctrl3=H-ui_px(52);
+    g_pane_bottom=ctrl1-ui_px(30);
+    gap=ui_px(UI_GAP);
+    avail=g_pane_bottom-ui_px(UI_TOP)-2*gap;
     g_pane_avail=avail;
+    if (!g_wf_h) g_wf_h=ui_px(WF_DEFAULT);
     wf=g_wf_h;
-    if (wf>avail-RX_MIN-TXT_MIN) wf=avail-RX_MIN-TXT_MIN;
-    if (wf<WF_MIN) wf=WF_MIN;
+    if (wf>avail-rx_min-txt_min) wf=avail-rx_min-txt_min;
+    if (wf<wf_min) wf=wf_min;
     rem=avail-wf;
     rx=(int)lround(rem*g_rx_ratio);
-    if (rx<RX_MIN) rx=RX_MIN;
-    if (rx>rem-TXT_MIN) rx=rem-TXT_MIN;
+    if (rx<rx_min) rx=rx_min;
+    if (rx>rem-txt_min) rx=rem-txt_min;
     tx=rem-rx;
-    g_pane_x=UI_LEFT;
+    g_pane_x=ui_px(UI_LEFT);
     g_pane_w=pw;
-    g_rx_y=UI_TOP;
+    g_rx_y=ui_px(UI_TOP);
     g_rx_h=rx;
-    g_txt_y=g_rx_y+rx+UI_GAP;
+    g_txt_y=g_rx_y+rx+gap;
     g_txt_h=tx;
-    g_wf_y=g_txt_y+tx+UI_GAP;
+    g_wf_y=g_txt_y+tx+gap;
     g_wf_h=wf;
-    g_split1=g_txt_y-UI_GAP/2;
-    g_split2=g_wf_y-UI_GAP/2;
-    MoveWindow(h_text,UI_LEFT,g_txt_y,pw,tx,TRUE);
-    MoveWindow(h_mode,10,ctrl1,100,200,TRUE);
-    MoveWindow(h_freq,120,ctrl1,70,26,TRUE);
-    MoveWindow(h_bw,200,ctrl1,70,26,TRUE);
-    MoveWindow(h_tx,280,ctrl1,160,28,TRUE);
-    MoveWindow(h_stop,446,ctrl1,85,28,TRUE);
-    MoveWindow(h_rx,537,ctrl1,125,28,TRUE);
-    MoveWindow(h_status,672,ctrl1+3,W>682?W-682:120,24,TRUE);
-    devw=(pw-170)/2;
-    if (devw<100) devw=100;
-    xout=20+devw;
-    langx=30+2*devw;
-    MoveWindow(h_in,10,ctrl2,devw,200,TRUE);
-    MoveWindow(h_out,xout,ctrl2,devw,200,TRUE);
-    MoveWindow(h_lang,langx,ctrl2,150,200,TRUE);
-    MoveWindow(h_sql,10,ctrl3+2,170,28,TRUE);
-    MoveWindow(h_sqlval,184,ctrl3+4,36,22,TRUE);
-    MoveWindow(h_contrast,250,ctrl3+2,170,28,TRUE);
-    MoveWindow(h_cval,424,ctrl3+4,36,22,TRUE);
-    MoveWindow(h_auto,470,ctrl3,110,28,TRUE);
-    MoveWindow(h_phase,590,ctrl3+2,140,28,TRUE);
-    MoveWindow(h_phaseval,734,ctrl3+4,36,22,TRUE);
-    MoveWindow(h_rate,820,ctrl3+2,150,28,TRUE);
-    MoveWindow(h_rateval,974,ctrl3+4,52,22,TRUE);
-    MoveWindow(h_lmode,10,ctrl1-22,110,20,TRUE);
-    MoveWindow(h_lfreq,120,ctrl1-22,100,20,TRUE);
-    MoveWindow(h_lbw,200,ctrl1-22,150,20,TRUE);
-    MoveWindow(h_lin,10,ctrl2-22,devw,20,TRUE);
-    MoveWindow(h_lout,xout,ctrl2-22,devw,20,TRUE);
-    MoveWindow(h_llang,langx,ctrl2-22,150,20,TRUE);
-    MoveWindow(h_lsql,10,ctrl3-22,50,20,TRUE);
-    MoveWindow(h_lcontrast,250,ctrl3-22,180,20,TRUE);
-    MoveWindow(h_lphase,590,ctrl3-22,90,20,TRUE);
-    MoveWindow(h_lrate,820,ctrl3-22,170,20,TRUE);
+    g_split1=g_txt_y-gap/2;
+    g_split2=g_wf_y-gap/2;
+    MoveWindow(h_text,ui_px(UI_LEFT),g_txt_y,pw,tx,TRUE);
+    MoveWindow(h_mode,ui_px(10),ctrl1,ui_px(100),ui_px(200),TRUE);
+    MoveWindow(h_freq,ui_px(120),ctrl1,ui_px(70),ui_px(26),TRUE);
+    MoveWindow(h_bw,ui_px(200),ctrl1,ui_px(70),ui_px(26),TRUE);
+    MoveWindow(h_tx,ui_px(280),ctrl1,ui_px(160),ui_px(28),TRUE);
+    MoveWindow(h_stop,ui_px(446),ctrl1,ui_px(85),ui_px(28),TRUE);
+    MoveWindow(h_rx,ui_px(537),ctrl1,ui_px(125),ui_px(28),TRUE);
+    MoveWindow(h_status,ui_px(672),ctrl1+ui_px(3),W>ui_px(682)?W-ui_px(682):ui_px(120),ui_px(24),TRUE);
+    devw=(pw-ui_px(170))/2;
+    if (devw<ui_px(100)) devw=ui_px(100);
+    xout=ui_px(20)+devw;
+    langx=ui_px(30)+2*devw;
+    MoveWindow(h_in,ui_px(10),ctrl2,devw,ui_px(200),TRUE);
+    MoveWindow(h_out,xout,ctrl2,devw,ui_px(200),TRUE);
+    MoveWindow(h_lang,langx,ctrl2,ui_px(150),ui_px(200),TRUE);
+    MoveWindow(h_sql,ui_px(10),ctrl3+ui_px(2),ui_px(170),ui_px(28),TRUE);
+    MoveWindow(h_sqlval,ui_px(184),ctrl3+ui_px(4),ui_px(36),ui_px(22),TRUE);
+    MoveWindow(h_contrast,ui_px(250),ctrl3+ui_px(2),ui_px(170),ui_px(28),TRUE);
+    MoveWindow(h_cval,ui_px(424),ctrl3+ui_px(4),ui_px(36),ui_px(22),TRUE);
+    MoveWindow(h_auto,ui_px(470),ctrl3,ui_px(110),ui_px(28),TRUE);
+    MoveWindow(h_phase,ui_px(590),ctrl3+ui_px(2),ui_px(140),ui_px(28),TRUE);
+    MoveWindow(h_phaseval,ui_px(734),ctrl3+ui_px(4),ui_px(36),ui_px(22),TRUE);
+    MoveWindow(h_rate,ui_px(820),ctrl3+ui_px(2),ui_px(150),ui_px(28),TRUE);
+    MoveWindow(h_rateval,ui_px(974),ctrl3+ui_px(4),ui_px(52),ui_px(22),TRUE);
+    MoveWindow(h_lmode,ui_px(10),ctrl1-ui_px(22),ui_px(110),ui_px(20),TRUE);
+    MoveWindow(h_lfreq,ui_px(120),ctrl1-ui_px(22),ui_px(100),ui_px(20),TRUE);
+    MoveWindow(h_lbw,ui_px(200),ctrl1-ui_px(22),ui_px(150),ui_px(20),TRUE);
+    MoveWindow(h_lin,ui_px(10),ctrl2-ui_px(22),devw,ui_px(20),TRUE);
+    MoveWindow(h_lout,xout,ctrl2-ui_px(22),devw,ui_px(20),TRUE);
+    MoveWindow(h_llang,langx,ctrl2-ui_px(22),ui_px(150),ui_px(20),TRUE);
+    MoveWindow(h_lsql,ui_px(10),ctrl3-ui_px(22),ui_px(50),ui_px(20),TRUE);
+    MoveWindow(h_lcontrast,ui_px(250),ctrl3-ui_px(22),ui_px(180),ui_px(20),TRUE);
+    MoveWindow(h_lphase,ui_px(590),ctrl3-ui_px(22),ui_px(90),ui_px(20),TRUE);
+    MoveWindow(h_lrate,ui_px(820),ctrl3-ui_px(22),ui_px(170),ui_px(20),TRUE);
     InvalidateRect(hwnd,0,FALSE);
 }
 
@@ -1093,8 +1147,8 @@ static void paint_rx(HDC dc,int x,int y,int w,int h) {
     EnterCriticalSection(&g_cs);
     Img im=g_rx;
     if (im.p && im.w>0) {
-        int sx=2,sy=2,sep=5,H=ROWS*2,lh=H*sy+sep;
-        int cols=(w-4)/sx,lines=(h+sep)/lh;
+        int sx=ui_px(2),sy=ui_px(2),sep=ui_px(5),H=ROWS*2,lh=H*sy+sep;
+        int cols=(w-ui_px(4))/sx,lines=(h+sep)/lh;
         int pages,first;
         if (cols<1) cols=1;
         if (lines<1) lines=1;
@@ -1177,14 +1231,19 @@ static void paint_wf(HDC dc,int x,int y,int w,int h) {
     int rx1=x+(int)lround((center+half)*w/3000);
     if (rx0<x) rx0=x;
     if (rx1>x+w) rx1=x+w;
-    RECT rr={rx0,y,rx1,y+h};
     HBRUSH red=CreateSolidBrush(RGB(255,40,40));
-    FrameRect(dc,&rr,red);
+    int edge=ui_px(1);
+    RECT rt={rx0,y,rx1,y+edge},rb={rx0,y+h-edge,rx1,y+h};
+    RECT rl={rx0,y,rx0+edge,y+h},rr={rx1-edge,y,rx1,y+h};
+    FillRect(dc,&rt,red);
+    FillRect(dc,&rb,red);
+    FillRect(dc,&rl,red);
+    FillRect(dc,&rr,red);
     int l0=x+(int)lround((center-bw/2.0)*w/3000);
     int l1=x+(int)lround((center+bw/2.0)*w/3000);
     if (l0<x) l0=x;
     if (l1>x+w) l1=x+w;
-    RECT bar={l0,y+2,l1,y+6};
+    RECT bar={l0,y+ui_px(2),l1,y+ui_px(6)};
     FillRect(dc,&bar,red);
     DeleteObject(red);
 }
@@ -1193,8 +1252,22 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
     switch (msg) {
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mm=(MINMAXINFO*)lp;
-        mm->ptMinTrackSize.x=900;
-        mm->ptMinTrackSize.y=500;
+        mm->ptMinTrackSize.x=ui_px(900);
+        mm->ptMinTrackSize.y=ui_px(500);
+        return 0;
+    }
+    case WM_DPICHANGED: {
+        RECT *r=(RECT*)lp;
+        int dpi=HIWORD(wp);
+        if (dpi>=96 && dpi!=g_dpi) {
+            int old=g_dpi;
+            g_dpi=dpi;
+            if (g_wf_h) g_wf_h=MulDiv(g_wf_h,dpi,old);
+            refresh_ui_fonts();
+            SetWindowPos(h,0,r->left,r->top,r->right-r->left,r->bottom-r->top,
+                SWP_NOZORDER|SWP_NOACTIVATE);
+            layout_ui();
+        }
         return 0;
     }
     case WM_SIZE:
@@ -1212,8 +1285,8 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         paint_rx(dc,g_pane_x,g_rx_y,g_pane_w,g_rx_h);
         paint_wf(dc,g_pane_x,g_wf_y,g_pane_w,g_wf_h);
         HBRUSH sp=CreateSolidBrush(g_drag?RGB(70,130,210):RGB(175,175,175));
-        RECT r1={g_pane_x,g_split1,g_pane_x+g_pane_w,g_split1+2};
-        RECT r2={g_pane_x,g_split2,g_pane_x+g_pane_w,g_split2+2};
+        RECT r1={g_pane_x,g_split1,g_pane_x+g_pane_w,g_split1+ui_px(2)};
+        RECT r2={g_pane_x,g_split2,g_pane_x+g_pane_w,g_split2+ui_px(2)};
         FillRect(dc,&r1,sp);
         FillRect(dc,&r2,sp);
         DeleteObject(sp);
@@ -1227,9 +1300,10 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
             swprintf(label,16,f==3000?L"3000":L"%d",f);
             GetTextExtentPoint32W(dc,label,(int)wcslen(label),&sz);
             fx-=sz.cx/2;
-            if (fx<g_pane_x+2) fx=g_pane_x+2;
-            if (fx+sz.cx>g_pane_x+g_pane_w-2) fx=g_pane_x+g_pane_w-2-sz.cx;
-            TextOutW(dc,fx,g_wf_y+4,label,(int)wcslen(label));
+            if (fx<g_pane_x+ui_px(2)) fx=g_pane_x+ui_px(2);
+            if (fx+sz.cx>g_pane_x+g_pane_w-ui_px(2))
+                fx=g_pane_x+g_pane_w-ui_px(2)-sz.cx;
+            TextOutW(dc,fx,g_wf_y+ui_px(4),label,(int)wcslen(label));
         }
         SetTextColor(dc,RGB(20,20,20));
         EndPaint(h,&ps);
@@ -1388,10 +1462,10 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         return 0;
     case WM_LBUTTONDOWN: {
         int x=(short)LOWORD(lp),y=(short)HIWORD(lp);
-        if (abs(y-g_split1)<=SPLIT_HIT) {
+        if (abs(y-g_split1)<=ui_px(SPLIT_HIT)) {
             g_drag=1;
             SetCapture(h);
-        } else if (abs(y-g_split2)<=SPLIT_HIT) {
+        } else if (abs(y-g_split2)<=ui_px(SPLIT_HIT)) {
             g_drag=2;
             SetCapture(h);
         } else if (y>=g_wf_y && y<=g_wf_y+g_wf_h && x>=g_pane_x && x<=g_pane_x+g_pane_w) {
@@ -1401,7 +1475,7 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
             int x0=g_pane_x+(int)lround((center-half)*g_pane_w/3000);
             int x1=g_pane_x+(int)lround((center+half)*g_pane_w/3000);
             int f;
-            if (x>=x0-6 && x<=x1+6) {
+            if (x>=x0-ui_px(6) && x<=x1+ui_px(6)) {
                 g_drag=3;
                 g_drag_x0=x;
                 g_drag_freq0=center;
@@ -1425,24 +1499,24 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
             if (f>3000-half) f=(int)lround(3000-half);
             set_freq(f);
         } else if (g_drag==1) {
-            int rem=g_rx_h+g_txt_h,rx=y-UI_TOP;
-            if (rx<RX_MIN) rx=RX_MIN;
-            if (rx>rem-TXT_MIN) rx=rem-TXT_MIN;
+            int rem=g_rx_h+g_txt_h,rx=y-ui_px(UI_TOP);
+            if (rx<ui_px(RX_MIN)) rx=ui_px(RX_MIN);
+            if (rx>rem-ui_px(TXT_MIN)) rx=rem-ui_px(TXT_MIN);
             g_rx_ratio=(double)rx/rem;
             layout_ui();
         } else if (g_drag==2) {
-            int wf=g_pane_bottom-(y+UI_GAP/2);
-            int rem,rx,maxwf=g_pane_avail-RX_MIN-TXT_MIN;
-            if (wf<WF_MIN) wf=WF_MIN;
+            int wf=g_pane_bottom-(y+ui_px(UI_GAP)/2);
+            int rem,rx,maxwf=g_pane_avail-ui_px(RX_MIN)-ui_px(TXT_MIN);
+            if (wf<ui_px(WF_MIN)) wf=ui_px(WF_MIN);
             if (wf>maxwf) wf=maxwf;
             rem=g_pane_avail-wf;
             rx=g_rx_h;
-            if (rx>rem-TXT_MIN) rx=rem-TXT_MIN;
-            if (rx<RX_MIN) rx=RX_MIN;
+            if (rx>rem-ui_px(TXT_MIN)) rx=rem-ui_px(TXT_MIN);
+            if (rx<ui_px(RX_MIN)) rx=ui_px(RX_MIN);
             g_rx_ratio=(double)rx/rem;
             g_wf_h=wf;
             layout_ui();
-        } else if (abs(y-g_split1)<=SPLIT_HIT || abs(y-g_split2)<=SPLIT_HIT) {
+        } else if (abs(y-g_split1)<=ui_px(SPLIT_HIT) || abs(y-g_split2)<=ui_px(SPLIT_HIT)) {
             SetCursor(LoadCursor(0,IDC_SIZENS));
         }
         return 0;
@@ -1459,7 +1533,7 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
         if (LOWORD(lp)==HTCLIENT) {
             GetCursorPos(&p);
             ScreenToClient(h,&p);
-            if (abs(p.y-g_split1)<=SPLIT_HIT || abs(p.y-g_split2)<=SPLIT_HIT) {
+            if (abs(p.y-g_split1)<=ui_px(SPLIT_HIT) || abs(p.y-g_split2)<=ui_px(SPLIT_HIT)) {
                 SetCursor(LoadCursor(0,IDC_SIZENS));
                 return TRUE;
             }
@@ -1469,7 +1543,7 @@ static LRESULT CALLBACK wndproc(HWND h,UINT msg,WPARAM wp,LPARAM lp) {
                 double half=m->fsk?m->shift/2.0:bw/2.0;
                 int x0=g_pane_x+(int)lround((center-half)*g_pane_w/3000);
                 int x1=g_pane_x+(int)lround((center+half)*g_pane_w/3000);
-                if (p.x>=x0-6 && p.x<=x1+6) {
+                if (p.x>=x0-ui_px(6) && p.x<=x1+ui_px(6)) {
                     SetCursor(LoadCursor(0,IDC_SIZEWE));
                     return TRUE;
                 }
@@ -1510,6 +1584,7 @@ static void gui_cwd(void) {
 }
 
 static int gui_main(HINSTANCE inst,int show) {
+    enable_dpi_awareness();
     gui_cwd();
     load_ui_language();
     WNDCLASSEXW wc;
@@ -1527,18 +1602,19 @@ static int gui_main(HINSTANCE inst,int show) {
     wc.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     wc.lpszClassName=L"UniHELLGUI";
     RegisterClassExW(&wc);
-    SetProcessDPIAware();
     g_fontpath=default_font();
     InitializeCriticalSection(&g_cs);
     g_editbrush=CreateSolidBrush(RGB(224,242,255));
-    g_ui=CreateFontW(16,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei");
-    g_edit=CreateFontW(20,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei");
-    hwnd=CreateWindowExW(0,L"UniHELLGUI",L"UniHELL " UNIHELL_VERSION_W L" - Hellschreiber",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,100,40,1100,800,0,0,inst,0);
+    hwnd=CreateWindowExW(0,L"UniHELLGUI",L"UniHELL " UNIHELL_VERSION_W L" - Hellschreiber",
+        WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,ui_px(100),ui_px(40),ui_px(1100),ui_px(800),0,0,inst,0);
     if (!hwnd) return 0;
+    int dpi=window_dpi(hwnd);
+    if (dpi>=96 && dpi<=480) g_dpi=dpi;
+    SetWindowPos(hwnd,0,ui_px(100),ui_px(40),ui_px(1100),ui_px(800),
+        SWP_NOZORDER|SWP_NOACTIVATE);
     h_text=CreateWindowExW(WS_EX_CLIENTEDGE,MSFTEDIT_CLASS,L"",WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_AUTOVSCROLL|ES_WANTRETURN,0,0,100,60,hwnd,0,inst,0);
     g_oldtext=(WNDPROC)SetWindowLongPtrW(h_text,GWLP_WNDPROC,(LONG_PTR)text_proc);
     SendMessageW(h_text,EM_SETEVENTMASK,0,ENM_CHANGE);
-    SendMessageW(h_text,WM_SETFONT,(WPARAM)g_edit,TRUE);
     SendMessageW(h_text,EM_SETBKGNDCOLOR,0,RGB(224,242,255));
     CHARFORMAT2W cf;
     memset(&cf,0,sizeof(cf));
@@ -1596,36 +1672,7 @@ static int gui_main(HINSTANCE inst,int show) {
     h_lcontrast=CreateWindowW(L"STATIC",T(GUI_S_WATERFALL),WS_CHILD|WS_VISIBLE,0,0,60,20,hwnd,0,inst,0);
     h_lphase=CreateWindowW(L"STATIC",T(GUI_S_PHASE),WS_CHILD|WS_VISIBLE,0,0,50,20,hwnd,0,inst,0);
     h_lrate=CreateWindowW(L"STATIC",T(GUI_S_RATE),WS_CHILD|WS_VISIBLE,0,0,50,20,hwnd,0,inst,0);
-    SendMessageW(h_text,WM_SETFONT,(WPARAM)g_edit,TRUE);
-    SendMessageW(h_freq,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_tx,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_stop,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_rx,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_status,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_mode,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_bw,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_in,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_out,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lang,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_llang,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_sql,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_sqlval,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_contrast,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_cval,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_phase,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_phaseval,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_rate,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_rateval,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_auto,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lmode,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lfreq,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lbw,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lin,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lout,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lsql,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lcontrast,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lphase,WM_SETFONT,(WPARAM)g_ui,TRUE);
-    SendMessageW(h_lrate,WM_SETFONT,(WPARAM)g_ui,TRUE);
+    refresh_ui_fonts();
     sync_bw();
     layout_ui();
     apply_ui_language();

@@ -8,6 +8,7 @@ UniHELL 是一个 Windows 上的 Hellschreiber（地狱传真）收发程序，�
 
 - `unihell.exe`：带实时声卡、彩色瀑布和文本发射编辑的 GUI。
 - `unihell-cli.exe`：命令行收发工具，可生成/解码 WAV 与 PGM，便于离线测试和批量处理。
+- GUI 跟随 Windows 每显示器 DPI 缩放字体、控件和接收图像。
 
 ## 2.0.0 更新
 
