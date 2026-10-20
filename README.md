@@ -159,7 +159,7 @@ unihell-cli --lang zh --help
 
 默认字体为 `fonts/wenquanyi_13px.pcf`（文泉驿点阵宋体 13px）。GUI 使用默认字体；CLI 可用 `-F/--font` 指定其他字体。`fonts/` 中还包含可选的 CJK、日文和 Emoji 字体，具体授权见 `fonts/NOTICE.md`。
 
-发布包中的 `THIRD_PARTY_LICENSES/` 包含 FreeType 的 `LICENSE.TXT`、完整 `FTL.TXT` 和 HarfBuzz 的许可证文本；这两个库以静态库形式链接进可执行文件。
+发布包中的 `THIRD_PARTY_LICENSES/` 还包含实际静态链接组件的许可证原文：FreeType 2.13.3（FTL）、FreeType 的 BDF/PCF 驱动、FreeType 内置 zlib 1.3、HarfBuzz 8.5.0（含 ms-use 数据许可证），以及 MinGW-w64 运行时、winpthread、GCC 运行时及其许可证例外。两个可执行文件都不依赖外部的 `libwinpthread-1.dll` 或 `libstdc++-6.dll`。
 
 Portions of this software are copyright © 2024 The FreeType Project (<https://www.freetype.org>). All rights reserved.
 

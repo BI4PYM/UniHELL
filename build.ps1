@@ -39,9 +39,17 @@ if ($Release) {
     Copy-Item -LiteralPath .\assets -Destination $stage -Recurse
     $licenses = Join-Path $stage 'THIRD_PARTY_LICENSES'
     New-Item -ItemType Directory -Path $licenses -Force | Out-Null
+    Copy-Item -LiteralPath .\third_party\README.md -Destination (Join-Path $licenses 'README.md')
     Copy-Item -LiteralPath .\third_party\freetype\LICENSE.TXT -Destination (Join-Path $licenses 'FreeType-LICENSE.txt')
     Copy-Item -LiteralPath .\third_party\freetype\FTL.TXT -Destination (Join-Path $licenses 'FreeType-FTL.txt')
+    Copy-Item -LiteralPath .\third_party\freetype\BDF-README.txt -Destination (Join-Path $licenses 'FreeType-BDF-LICENSE.txt')
+    Copy-Item -LiteralPath .\third_party\freetype\PCF-README.txt -Destination (Join-Path $licenses 'FreeType-PCF-LICENSE.txt')
+    Copy-Item -LiteralPath .\third_party\freetype\ZLIB-LICENSE.txt -Destination (Join-Path $licenses 'ZLIB-LICENSE.txt')
     Copy-Item -LiteralPath .\third_party\harfbuzz\COPYING -Destination (Join-Path $licenses 'HarfBuzz-COPYING.txt')
+    Copy-Item -LiteralPath .\third_party\harfbuzz\ms-use\COPYING -Destination (Join-Path $licenses 'HarfBuzz-ms-use-COPYING.txt')
+    Copy-Item -LiteralPath .\third_party\mingw-w64\COPYING.MinGW-w64-runtime.txt -Destination (Join-Path $licenses 'MinGW-w64-RUNTIME-LICENSE.txt')
+    Copy-Item -LiteralPath .\third_party\mingw-w64\COPYING.RUNTIME.txt -Destination (Join-Path $licenses 'GCC-RUNTIME-EXCEPTION.txt')
+    Copy-Item -LiteralPath .\third_party\mingw-w64\COPYING3.txt -Destination (Join-Path $licenses 'GPL-3.0.txt')
     Get-FileHash -LiteralPath (Join-Path $stage 'unihell.exe'),(Join-Path $stage 'unihell-cli.exe') |
         ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
         Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt')
