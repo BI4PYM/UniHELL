@@ -40,6 +40,7 @@ if ($Release) {
     $licenses = Join-Path $stage 'THIRD_PARTY_LICENSES'
     New-Item -ItemType Directory -Path $licenses -Force | Out-Null
     Copy-Item -LiteralPath .\third_party\freetype\LICENSE.TXT -Destination (Join-Path $licenses 'FreeType-LICENSE.txt')
+    Copy-Item -LiteralPath .\third_party\freetype\FTL.TXT -Destination (Join-Path $licenses 'FreeType-FTL.txt')
     Copy-Item -LiteralPath .\third_party\harfbuzz\COPYING -Destination (Join-Path $licenses 'HarfBuzz-COPYING.txt')
     Get-FileHash -LiteralPath (Join-Path $stage 'unihell.exe'),(Join-Path $stage 'unihell-cli.exe') |
         ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
